@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asset Tracker (Cloud Sync)</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#3b82f6"/>
+    <link rel="apple-touch-icon" href="https://placehold.co/192x192/3b82f6/FFFFFF?text=AT">
+    
+    <!-- External Dependencies -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <!-- Tailwind CSS Configuration (Kept inline as per original structure) -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': {
+                            '50': '#eff6ff', '100': '#dbeafe', '200': '#bfdbfe', '300': '#93c5fd', '400': '#60a5fa', '500': '#3b82f6', '600': '#2563eb', '700': '#1d4ed8', '800': '#1e40af', '900': '#1e3a8a', '950': '#172554',
+                        },
+                    },
+                },
+            },
+        };
+    </script>
+    
+    <!-- Internal CSS for Dark Mode and Layout -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f9fafb; /* Light background */
+            transition: background-color 0.3s;
+        }
+        .dark body {
+            background-color: #111827; /* Dark background */
+        }
+        .dark .card {
+            background-color: #1f2937;
+            border-color: #374151;
+            box-shadow: 0 4px 6px -1px rgba(255, 255, 255, 0.05), 0 2px 4px -2px rgba(255, 255, 255, 0.05);
+        }
+        /* Style for the offline banner */
+        #offline-banner {
+            position: fixed;
+            bottom: -50px; /* Hidden state */
+            left: 0;
+            width: 100%;
+            background-color: #f97316; /* Orange 500 */
+            color: white;
+            padding: 12px;
+            text-align: center;
+            font-weight: 600;
+            z-index: 1000;
+            transition: bottom 0.3s ease-in-out;
+        }
+        #offline-banner.show {
+            bottom: 0; /* Visible state */
+        }
+    </style>
+</head>
+<body class="text-gray-900 dark:text-gray-100 transition-colors duration-300">
+
+    <div class="min-h-screen flex flex-col max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+
+        <!-- Header -->
+        <header class="flex items-center justify-between pb-6 border-b border-gray-200 dark:border-gray-700 mb-6">
+            <h1 class="text-3xl font-extrabold text-primary-600 dark:text-primary-400">Asset Tracker</h1>
+            <div class="flex items-center space-x-4">
+                <!-- User Profile / Auth Placeholder -->
+                <button class="flex items-center text-sm font-medium text-gray-500 dark:text-gray-400 hover:text-primary-500 dark:hover:text-primary-400 transition-colors rounded-full p-2 bg-gray-100 dark:bg-gray-700/50">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span class="hidden sm:inline ml-2">Sign In</span>
+                </button>
+
+                <!-- Privacy Toggle Button -->
+                <button id="privacy-toggle-btn" class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                    <svg id="privacy-off-icon" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" title="Privacy Off (Data Visible)"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    <svg id="privacy-on-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" title="Privacy On (Data Hidden)"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7 1.274-4.057 5.064-7 9.543-7a9.958 9.958 0 011.875.175M17.5 17.5l-1.5-1.5m-3.5 3.5l1.5-1.5m-4.5-4.5l-1.5-1.5M4 4l16 16"></path></svg>
+                </button>
+
+                <!-- Dark Mode Toggle -->
+                <button id="dark-mode-toggle" class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" onclick="document.documentElement.classList.toggle('dark'); localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');">
+                    <svg class="w-6 h-6 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" title="Dark Mode"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                    <svg class="w-6 h-6 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" title="Light Mode"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.354 5.354l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <nav class="flex space-x-2 border-b border-gray-200 dark:border-gray-700 mb-6 sticky top-0 bg-f9fafb dark:bg-111827 z-10 transition-colors duration-300">
+            <button data-tab-target="#dashboard" class="tab-button py-2 px-4 rounded-t-lg font-semibold text-sm transition-colors border-b-2 border-primary-500 text-primary-500 dark:text-primary-400 dark:border-primary-400" aria-selected="true">
+                Dashboard
+            </button>
+            <button data-tab-target="#tracker" class="tab-button py-2 px-4 rounded-t-lg font-semibold text-sm transition-colors border-b-2 border-transparent text-gray-500 hover:text-primary-500 hover:border-primary-500 dark:text-gray-400 dark:hover:text-primary-400 dark:hover:border-primary-400">
+                Tracker
+            </button>
+            <button data-tab-target="#dividends" class="tab-button py-2 px-4 rounded-t-lg font-semibold text-sm transition-colors border-b-2 border-transparent text-gray-500 hover:text-primary-500 hover:border-primary-500 dark:text-gray-400 dark:hover:text-primary-400 dark:hover:border-primary-400">
+                Dividends/Income
+            </button>
+            <button data-tab-target="#summary" class="tab-button py-2 px-4 rounded-t-lg font-semibold text-sm transition-colors border-b-2 border-transparent text-gray-500 hover:text-primary-500 hover:border-primary-500 dark:text-gray-400 dark:hover:text-primary-400 dark:hover:border-primary-400">
+                Summary & Export
+            </button>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main class="flex-grow">
+            
+            <!-- Dashboard Tab Content -->
+            <div id="dashboard" class="tab-content active" role="tabpanel">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                    <!-- Key Metric 1: Total Asset Value -->
+                    <div class="card bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700/50">
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Asset Value</p>
+                        <p id="total-asset-value" class="text-4xl font-bold mt-1 text-primary-600 dark:text-primary-400">$123,456.78</p>
+                        <p id="rate-status" class="text-xs text-gray-400 dark:text-gray-500 mt-2">Rates: Loading...</p>
+                    </div>
+
+                    <!-- Key Metric 2: Total Gain/Loss -->
+                    <div class="card bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700/50">
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Total Gain / Loss (Overall)</p>
+                        <p id="total-gain-loss" class="text-4xl font-bold mt-1 text-green-500">+$12,345.67</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                            <span class="text-green-500 font-semibold">↑ 11.11%</span> since inception
+                        </p>
+                    </div>
+
+                    <!-- Key Metric 3: Monthly Dividends -->
+                    <div class="card bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700/50">
+                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Average Monthly Dividend</p>
+                        <p id="monthly-dividend" class="text-4xl font-bold mt-1 text-yellow-500">$123.45</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                            <span class="text-primary-500 font-semibold">2.5%</span> Dividend Yield
+                        </p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Chart 1: Portfolio Value Trend -->
+                    <div class="card bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700/50 h-96">
+                        <h3 class="text-lg font-semibold mb-3">Portfolio Value Trend</h3>
+                        <canvas id="portfolio-trend-chart"></canvas>
+                    </div>
+
+                    <!-- Chart 2: Asset Allocation -->
+                    <div class="card bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700/50 h-96">
+                        <h3 class="text-lg font-semibold mb-3">Asset Allocation</h3>
+                        <div class="h-80 flex justify-center items-center">
+                            <canvas id="allocation-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Chart 3: Historical Gain/Loss -->
+                    <div class="card bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700/50 h-96">
+                        <h3 class="text-lg font-semibold mb-3">Historical Gain / Loss</h3>
+                        <canvas id="gain-loss-chart"></canvas>
+                    </div>
+
+                    <!-- Chart 4: Monthly Dividends -->
+                    <div class="card bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700/50 h-96">
+                        <h3 class="text-lg font-semibold mb-3">Monthly Dividend Income</h3>
+                        <canvas id="dividend-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tracker Tab Content (Hidden by default) -->
+            <div id="tracker" class="tab-content hidden" role="tabpanel">
+                <h2 class="text-2xl font-bold mb-4">Asset & Transaction Tracker</h2>
+                <!-- Add Transaction Form Placeholder -->
+                <div class="card bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg mb-6 border border-gray-100 dark:border-gray-700/50">
+                    <h3 class="text-xl font-semibold mb-4">Add New Transaction</h3>
+                    <form id="add-transaction-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- Transaction Inputs Placeholder -->
+                        <input type="text" placeholder="Asset Name (e.g., AAPL, ETH)" class="input-field">
+                        <select class="input-field">
+                            <option>Buy</option>
+                            <option>Sell</option>
+                            <option>Dividend</option>
+                        </select>
+                        <input type="number" step="0.01" placeholder="Amount" class="input-field">
+                        <input type="number" step="0.000001" placeholder="Quantity" class="input-field">
+                        <input type="date" class="input-field">
+                        <input list="currency-list" placeholder="Currency (e.g., USD)" class="input-field">
+                        <datalist id="currency-list">
+                            <!-- Populated by JS -->
+                        </datalist>
+                        <button type="submit" class="col-span-1 md:col-span-3 bg-primary-600 text-white font-bold py-2 rounded-lg hover:bg-primary-700 transition-colors">Record Transaction</button>
+                    </form>
+                </div>
+                
+                <!-- Filters and Search Placeholder -->
+                <div class="card bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg mb-6 border border-gray-100 dark:border-gray-700/50 flex flex-wrap gap-4">
+                    <input type="text" placeholder="Filter by Asset Name" class="input-field flex-grow">
+                    <select class="input-field">
+                        <option>All Categories</option>
+                        <option>Stock</option>
+                        <option>Crypto</option>
+                        <option>Real Estate</option>
+                    </select>
+                    <button class="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-2 px-4 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">Apply Filters</button>
+                </div>
+
+                <!-- Transaction Table Placeholder -->
+                <div class="overflow-x-auto card bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700/50">
+                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                        <thead class="bg-gray-50 dark:bg-gray-700">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">Asset</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">Type</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">Amount</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">Quantity</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">Date</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transaction-table-body" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                            <!-- Table rows populated by JS -->
+                            <tr>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">AAPL</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-green-600 dark:text-green-400">BUY</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-right">$150.00</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-right">10.00</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">2023-10-01</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-right space-x-2">
+                                    <button class="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-200">Edit</button>
+                                    <button class="text-red-600 hover:text-red-900">Delete</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Dividends/Income Tab Content (Hidden by default) -->
+            <div id="dividends" class="tab-content hidden" role="tabpanel">
+                <h2 class="text-2xl font-bold mb-4">Monthly Income Analysis</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Dividend History Chart Placeholder -->
+                    <div class="card bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700/50 h-96">
+                        <h3 class="text-lg font-semibold mb-3">Historical Monthly Payouts</h3>
+                        <canvas id="income-history-chart"></canvas>
+                    </div>
+                    <!-- Dividend Details Placeholder -->
+                    <div class="card bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700/50">
+                        <h3 class="text-lg font-semibold mb-3">Income Sources</h3>
+                        <ul id="income-sources-list" class="space-y-3">
+                            <!-- List items populated by JS -->
+                            <li class="flex justify-between border-b pb-2 border-gray-100 dark:border-gray-700">
+                                <span>AAPL</span>
+                                <span class="font-medium text-green-500">$50.00</span>
+                            </li>
+                            <li class="flex justify-between border-b pb-2 border-gray-100 dark:border-gray-700">
+                                <span>MSFT</span>
+                                <span class="font-medium text-green-500">$73.45</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary & Export Tab Content (Hidden by default) -->
+            <div id="summary" class="tab-content hidden" role="tabpanel">
+                <h2 class="text-2xl font-bold mb-4">Portfolio Summary & Data Management</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Summary Report Placeholder -->
+                    <div class="card bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700/50">
+                        <h3 class="text-xl font-semibold mb-4">Detailed Report</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                            Generate a comprehensive report of your portfolio performance, holdings, and transaction history.
+                        </p>
+                        <button class="bg-primary-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-primary-700 transition-colors w-full">Generate PDF Report</button>
+                    </div>
+                    
+                    <!-- Export Data Placeholder -->
+                    <div class="card bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700/50">
+                        <h3 class="text-xl font-semibold mb-4">Export Data</h3>
+                        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                            Download all your transaction data for external analysis or backup.
+                        </p>
+                        <button id="export-csv-btn" class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition-colors w-full">Export to CSV/Excel</button>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Offline Banner -->
+        <div id="offline-banner">
+            <span id="offline-banner-message">You are currently offline. Changes will sync when connectivity returns.</span>
+        </div>
+
+    </div>
+
+    <!-- Firebase SDKs (External, remain here) -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-analytics.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <!-- NEW: Modular App Scripts -->
+    <!-- These files now contain all the logic that was previously in one large inline script -->
+    <script src="js/firebase-init.js"></script>
+    <script src="js/app-core.js"></script>
+    <script src="js/app-charts.js"></script>
+    <script src="js/app-ui.js"></script> 
+
+</body>
+</html>
